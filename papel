@@ -1,0 +1,123 @@
+import numpy as np
+import matplotlib.pyplot as plt
+
+class Environment:
+    #definicoes iniciais do ambiente
+    def __init__(self, n, price):
+        self.n = n #qtd
+        self.price = price
+        self.clock = 0
+
+        self.mu_usage = [10, 100, 150, 300, 125, 50, 15] #media uso diario
+        self.sigma_usage = [2, 10, 10, 20, 10, 10, 2] #desvio padrao
+        self.mu_price = 1.2 #preco base
+        self.sigma_price = 0.2 #desconto de quando tem promocao
+        self.on_sale = False
+        self.max_n = 1500 #qtd max
+
+    #percepcao inicial da IA
+    def initial_percepts(self): 
+        return {'n':self.n,
+                'price':self.price,
+                'max_n':self.max_n}
+
+    #acontecimentos no dia
+    def signal(self,action):
+        #calcula quantos papeis usou no dia. Atualiza quantos comprou (pede do agente)
+        usage = np.random.normal(self.mu_usage[self.clock%len(self.mu_usage)],self.sigma_usage[self.clock%len(self.sigma_usage)])
+        bought = action['to_buy']
+
+        #atualiza estoque
+        self.n = self.n - usage + bought #qtd - utilizado + comprado
+
+        #define os preços do dia
+        if self.clock%7 == 0:
+            self.price = 1.2 #reseta preco no inicio da semana
+
+            self.on_sale = True if np.random.rand() < 0.5 else False #50% de chance de promocao
+
+            if self.on_sale:
+                self.price -= self.sigma_price
+            else:
+                self.price = max(np.random.normal(self.mu_price,self.sigma_price), 0.9)
+
+        #passagem do dia
+        self.clock += 1
+        return {'n':self.n,
+                'price':self.price,
+                'max_n':self.max_n}
+
+class Agent:
+
+    #definições estados iniciais do agente
+    def __init__(self, env):
+        self.env = env #aponta para o ambiente
+        self.percepts = env.initial_percepts() #percepcao inicial
+        self.spendings = [] #cria array de gastos
+        self.clock = 1
+        self.S = {'average_price':self.percepts['price'],
+                'cheap':self.percepts['price'],
+                'veryCheap': 0.9,
+                'low':0, #estoque em emergencia
+                'min': 500} #qtd minima que precisa comprar p sair da emergencia. 
+
+    def act(self):
+        # Verificar estado atual do ambiente
+       
+        self.percepts['n'] = 'n',
+        self.percepts['price'] = 'price'
+
+        # Define quantidade que vai comprar
+        to_buy = 0
+        if self.percepts['price'] <= self.S['veryCheap']:#compra baratissima.
+            to_buy = self.percepts['max_n'] - self.percepts['n'] #compra o maximo.
+            print("compra o maximo, valor mais baixo que o normal")
+        elif self.percepts['price'] <= self.S['cheap']:
+            to_buy = (self.percepts['max_n'] - self.percepts['n'])/2
+            print("compra uma boa quantidade, pois valor esta baixo")
+        elif self.percepts['n'] <= self.S['low']:  #compra de emergencia
+            to_buy = self.S['min'] - self.percepts['n']
+            print("compra pra não ficar sem")
+        else:
+            to_buy = 0
+
+
+        action = {'to_buy':to_buy} #realiza compra
+
+        # ação
+        self.spendings.append(to_buy*self.percepts['price']) #adicionando o ultimo gasto no array de gastos
+        self.percepts = self.env.signal(action) #enviando pro ambiente quantos papeis foram comprados
+
+        # atualiza no que acredita
+        self.S = {'average_price': (self.S['average_price']*self.clock + self.percepts['price'])/(self.clock+1),
+                 'cheap': < self.percepts['price'], #'PERCEBE' OQUE É BARATO *
+                 'low': max(self.percepts['n']) + 2 *20, #VALOR MINIMO é o valor maximo gasto em um dia mais 2x o desvio padrao
+                 'min': self.percepts['max_n']/2}
+        
+        self.clock += 1 
+
+
+if __name__ == "__main__":
+    env = Environment(0, 1.2)
+    ag = Agent(env)
+
+    prices = []
+    n = []
+
+    for i in range(1000):
+        #atuando
+        ag.act()
+
+        #pegando os valores pro main
+        prices.append(env.price)
+        n.append(env.n)
+
+    #plotando resultados
+    plt.plot(prices) #plota preco
+    plt.show() #imprime o grafico 
+
+    plt.plot(n) #plota qtd de papel
+    plt.show()
+
+    plt.plot(ag.spendings)  #plota gasto
+    plt.show()
